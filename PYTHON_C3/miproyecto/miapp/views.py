@@ -3,12 +3,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.models import User
-from django.http import JsonResponse
+from .models import RecursosKit, DescargaRecursoKit
+from django.http import JsonResponse, FileResponse, Http404
 from .models import (
     UserProfile, Recurso, CategoriaRecurso, FormularioContacto, RespuestaConsulta,
     CategoriaForo, HiloForo, RespuestaForo
 )
 from .forms import RecursoForm, UserForm, UserProfileForm
+
 
 
 def custom_login(request):
@@ -870,13 +872,145 @@ def volver_a_pasante(request):
     return redirect('miapp:pasante_dashboard')
 
 
+# Kit de herramienta 
 @login_required
 def recursos(request):
     """Vista para los recursos - Versión mejorada"""
     try:
-        recursos_list = Recurso.objects.filter(es_publico=True)
-        return render(request, 'miapp/recursos.html', {'recursos': recursos_list})
+        recursos_list = RecursosKit.objects.filter(activo=True)
+        return render(request, 'miapp/recursos.html', {'recursos_kit': recursos_list})
     except Exception as e:
         print(f"🔍 ERROR en vista recursos: {e}")
-        # Si hay error, redirigir a una página segura
         return redirect('miapp:index')
+
+def recursos_view(request):
+    # Obtener recursos activos ordenados
+    recursos_kit = RecursosKit.objects.filter(activo=True).order_by('orden', '-fecha_creacion')
+    
+    context = {
+        'recursos_kit': recursos_kit,
+    }
+    return render(request, 'miapp/recursos.html', context)
+
+@login_required
+def descargar_recurso_kit(request, recurso_id):
+    recurso = get_object_or_404(RecursosKit, id=recurso_id, activo=True)
+    
+    # Registrar la descarga
+    DescargaRecursoKit.objects.get_or_create(
+        usuario=request.user,
+        recurso=recurso
+    )
+ # Incrementar contador de descargas
+    recurso.descargas += 1
+    recurso.save()
+    
+    # Servir el archivo
+    try:
+        response = FileResponse(
+            recurso.archivo.open(), 
+            as_attachment=True, 
+            filename=recurso.archivo.name
+        )
+        return response
+    except FileNotFoundError:
+        raise Http404("El archivo no existe")
+
+@login_required
+def gestionar_herramientas(request):
+    # Verificar que el usuario sea pasante o admin
+    if not hasattr(request.user, 'userprofile') or request.user.userprofile.tipo_usuario not in ['pasante', 'admin']:
+        messages.error(request, "No tienes permisos para acceder a esta página.")
+        return redirect('miapp:index')
+    
+    recursos = RecursosKit.objects.all().order_by('orden', '-fecha_creacion')
+    
+    context = {
+        'recursos': recursos,
+    }
+    return render(request, 'miapp/admin/gestionar_herramientas.html', context)
+
+@login_required
+def crear_recurso(request):
+    if not hasattr(request.user, 'userprofile') or request.user.userprofile.tipo_usuario not in ['pasante', 'admin']:
+        messages.error(request, "No tienes permisos para realizar esta acción.")
+        return redirect('miapp:index')
+    
+    if request.method == 'POST':
+        titulo = request.POST.get('titulo')
+        descripcion = request.POST.get('descripcion')
+        categoria = request.POST.get('categoria')
+        tipo_archivo = request.POST.get('tipo_archivo')
+        archivo = request.FILES.get('archivo')
+        icono = request.POST.get('icono', 'fas fa-file-pdf')
+        color = request.POST.get('color', 'primary')
+        
+        if titulo and descripcion and archivo:
+            recurso = RecursosKit(
+                titulo=titulo,
+                descripcion=descripcion,
+                categoria=categoria,
+                tipo_archivo=tipo_archivo,
+                archivo=archivo,
+                icono=icono,
+                color=color,
+                tamaño=f"{archivo.size / 1024 / 1024:.1f} MB"
+            )
+            recurso.save()
+            messages.success(request, "Recurso creado exitosamente.")
+            return redirect('miapp:admin_gestionar_herramientas')  # ← Cambiar aquí
+
+        else:
+            messages.error(request, "Por favor completa todos los campos requeridos.")
+    
+    return render(request, 'miapp/kitRecursos/crear_recurso.html')
+
+@login_required
+def editar_recurso(request, recurso_id):
+    if not hasattr(request.user, 'userprofile') or request.user.userprofile.tipo_usuario not in ['pasante', 'admin']:
+        messages.error(request, "No tienes permisos para realizar esta acción.")
+        return redirect('miapp:index')
+    
+    recurso = get_object_or_404(RecursosKit, id=recurso_id)
+    
+    if request.method == 'POST':
+        recurso.titulo = request.POST.get('titulo')
+        recurso.descripcion = request.POST.get('descripcion')
+        recurso.categoria = request.POST.get('categoria')
+        recurso.tipo_archivo = request.POST.get('tipo_archivo')
+        recurso.icono = request.POST.get('icono')
+        recurso.color = request.POST.get('color')
+        recurso.activo = request.POST.get('activo') == 'on'
+        recurso.orden = request.POST.get('orden', 0)
+        
+        if 'archivo' in request.FILES:
+            recurso.archivo = request.FILES['archivo']
+            recurso.tamaño = f"{request.FILES['archivo'].size / 1024 / 1024:.1f} MB"
+        
+        recurso.save()
+        messages.success(request, "Recurso actualizado exitosamente.")
+        return redirect('miapp:admin_gestionar_herramientas') 
+    
+    context = {
+        'recurso': recurso,
+    }
+    return render(request, 'miapp/kitRecursos/editar_recurso.html', context)
+
+@login_required
+def eliminar_recurso(request, recurso_id):
+    if not hasattr(request.user, 'userprofile') or request.user.userprofile.tipo_usuario not in ['pasante', 'admin']:
+        messages.error(request, "No tienes permisos para realizar esta acción.")
+        return redirect('miapp:index')
+    
+    recurso = get_object_or_404(RecursosKit, id=recurso_id)
+    
+    if request.method == 'POST':
+        recurso.delete()
+        messages.success(request, "Recurso eliminado exitosamente.")
+        return redirect('miapp:admin_gestionar_herramientas')
+    
+    context = {
+        'recurso': recurso,
+    }
+    return redirect('miapp:admin_gestionar_herramientas') 
+
