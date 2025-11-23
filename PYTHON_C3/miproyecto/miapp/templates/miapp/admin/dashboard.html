@@ -87,6 +87,8 @@
     .btn-green { background: linear-gradient(90deg,#0BA859,#0CBC70); }
     .btn-orange { background: linear-gradient(90deg,#FFB400,#FF8C00); }
     .btn-blue { background: linear-gradient(90deg,#0C77FF,#3E9BFF); }
+    .btn-purple { background: linear-gradient(90deg,#800091,#950da7ce); }
+
 
 </style>
 
@@ -161,6 +163,11 @@
         <div class="col-md-4 mb-3">
             <a href="{% url 'miapp:admin_consultas' %}" class="action-btn btn-orange">
                 <i class="fas fa-envelope"></i> Ver Consultas
+            </a>
+        </div>
+        <div class="col-md-4 mb-3">
+            <a href="{% url 'miapp:admin_gestionar_herramientas' %}" class="action-btn btn-green">     
+                 <i class="fas fa-envelope"></i> Gestionar Herramientas
             </a>
         </div>
 

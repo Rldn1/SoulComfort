@@ -315,3 +315,82 @@ class ContenidoPersonalizado(models.Model):
 
     def __str__(self):
         return f"{self.titulo} - Para {self.paciente.username}"
+
+# kit de herramienta 
+class RecursosKit(models.Model):
+    TIPO_ARCHIVO_CHOICES = [
+        ('pdf', 'PDF'),
+        ('doc', 'Documento Word'),
+        ('xls', 'Excel'),
+        ('ppt', 'PowerPoint'),
+        ('image', 'Imagen'),
+        ('video', 'Video'),
+        ('audio', 'Audio'),
+    ]
+    
+    CATEGORIA_CHOICES = [
+        ('meditacion', 'Meditación'),
+        ('ansiedad', 'Manejo de Ansiedad'),
+        ('sueno', 'Calidad de Sueño'),
+        ('autocompasion', 'Autocompasión'),
+        ('comunicacion', 'Comunicación'),
+        ('planificacion', 'Planificación'),
+        ('ejercicios', 'Ejercicios Prácticos'),
+        ('guias', 'Guías Rápidas'),
+    ]
+    
+    titulo = models.CharField(max_length=200, verbose_name="Título del recurso")
+    descripcion = models.TextField(verbose_name="Descripción")
+    archivo = models.FileField(upload_to='recursos_kit/', verbose_name="Archivo")
+    tipo_archivo = models.CharField(max_length=10, choices=TIPO_ARCHIVO_CHOICES, verbose_name="Tipo de archivo")
+    categoria = models.CharField(max_length=20, choices=CATEGORIA_CHOICES, verbose_name="Categoría")
+    tamaño = models.CharField(max_length=20, help_text="Ej: 2.5 MB", verbose_name="Tamaño del archivo")
+    icono = models.CharField(max_length=50, default='fas fa-file-pdf', verbose_name="Icono Font Awesome")
+    color = models.CharField(max_length=20, default='primary', verbose_name="Color del botón")
+    
+    
+    # Metadata
+    descargas = models.PositiveIntegerField(default=0, verbose_name="Número de descargas")
+    fecha_creacion = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de creación")
+    fecha_actualizacion = models.DateTimeField(auto_now=True, verbose_name="Fecha de actualización")
+    activo = models.BooleanField(default=True, verbose_name="¿Activo?")
+    
+    # Para control de acceso
+    solo_usuarios_registrados = models.BooleanField(default=True, verbose_name="Solo para usuarios registrados")
+    orden = models.PositiveIntegerField(default=0, verbose_name="Orden de visualización")
+    
+    class Meta:
+        verbose_name = 'Recurso del Kit'
+        verbose_name_plural = 'Recursos del Kit'
+        ordering = ['orden', '-fecha_creacion']
+        db_table = 'recursos_kit'
+    
+    def __str__(self):
+        return self.titulo
+    
+    def incrementar_descargas(self):
+        self.descargas += 1
+        self.save()
+    
+    def get_icon_class(self):
+        """Retorna la clase del icono para Font Awesome"""
+        return self.icono
+    
+    def get_bootstrap_color(self):
+        """Retorna la clase de color para Bootstrap"""
+        return f"btn-{self.color}"
+
+class DescargaRecursoKit(models.Model):
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Usuario")
+    recurso = models.ForeignKey(RecursosKit, on_delete=models.CASCADE, verbose_name="Recurso")
+    fecha_descarga = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de descarga")
+    ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name="Dirección IP")
+    
+    class Meta:
+        verbose_name = 'Descarga de Recurso Kit'
+        verbose_name_plural = 'Descargas de Recursos Kit'
+        unique_together = ['usuario', 'recurso']
+        db_table = 'descargas_recursos_kit'
+    
+    def __str__(self):
+        return f"{self.usuario.username} - {self.recurso.titulo}"
